@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>DeepSeek Chat</title>
+  <title>NeoDot</title>
   <style>
 :root {
   --primary-color: #2563eb;
@@ -19,8 +19,6 @@
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-track: #f1f5f9;
   --nav-bg: #ffffff;
-  --weather-bg: #e6f7ff;
-  --earthquake-bg: #fff2f0;
 }
 
 [data-theme="dark"] {
@@ -37,8 +35,6 @@
   --scrollbar-thumb: #475569;
   --scrollbar-track: #1e293b;
   --nav-bg: #1e293b;
-  --weather-bg: #003a6d;
-  --earthquake-bg: #5c2b29;
 }
 
 * {
@@ -241,7 +237,6 @@ body {
   border-radius: 12px 12px 12px 0;
   border: 1px solid var(--border-color);
 }
-
 /* Special message types */
 .weather-alert {
   background: var(--weather-bg);
@@ -305,7 +300,6 @@ body {
   font-weight: 600;
   color: #ff4d4f;
 }
-
 .content-section {
   margin-top: 16px;
   border-radius: 8px;
@@ -515,7 +509,9 @@ body {
   .sidebar.open {
     transform: translateX(260px);
   }
-  
+  .messages{
+    max-height: 86%;
+  }
   .chat-container {
     margin-left: 0;
   }
