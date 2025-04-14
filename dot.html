@@ -756,6 +756,7 @@ body {
     </div>
   </div>
 
+
 <script>
 // YouTube video search API with API key support
     // YouTube video search API with API key support
@@ -1199,7 +1200,7 @@ body {
     function createNewConversation() {
       const newConversation = {
         id: Date.now().toString(),
-        title: "New chat",
+        title: "New Chat",
         messages: [
           {
             sender: "bot",
@@ -1495,7 +1496,8 @@ body {
       addMessage(query, 'user');
       
       // Update conversation title if this is the first user message
-      if (conversations.find(c => c.id === currentConversationId).messages.length === 1) {
+      const conversation = conversations.find(c => c.id === currentConversationId);
+      if (conversation && conversation.title === "New Chat") {
         updateConversationTitle(query);
       }
       
@@ -1785,16 +1787,14 @@ body {
 
     // Initialize the app when DOM is loaded
     document.addEventListener('DOMContentLoaded', init);
-  </script>
+</script>
     <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-QCJKG8NXX0"></script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
   gtag('js', new Date());
-
   gtag('config', 'G-QCJKG8NXX0');
-  
 </script>
 </body>
 </html>
