@@ -758,76 +758,130 @@ body {
 
 <script>
 // YouTube video search API with API key support
+    // YouTube video search API with API key support
     async function searchYouTubeVideos(query) {
+      const CACHE_DURATION = 60 * 60 * 1000; // 1 hour cache
+      const cacheKey = `yt_${encodeURIComponent(query)}`;
+      
+      // Check cache first
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_DURATION) {
+          return data;
+        }
+      }
+    
       try {
-        const YOUTUBE_API_KEY = "AIzaSyAqXHbNakvVR_SCW3_HgEaycrO2oL89URA";
+        const YOUTUBE_API_KEY = "AIzaSyAqXHbNakvVR_SCW3_HgEaycrO2oL89URA"; // Consider replacing with your own key
         
-        // First search for most relevant videos (not sorted by viewCount)
-        const searchResponse = await fetch(
-          `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`
-        );
+        // Add timeout and abort controller
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+        
+        // First search for most relevant videos
+        const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=5&q=${encodeURIComponent(query)}&type=video&key=${YOUTUBE_API_KEY}`;
+        const searchResponse = await fetch(searchUrl, { signal: controller.signal });
+        clearTimeout(timeout);
+        
+        if (!searchResponse.ok) {
+          throw new Error(`YouTube API error: ${searchResponse.status}`);
+        }
+        
         const searchData = await searchResponse.json();
         
-        if (searchData.items && searchData.items.length > 0) {
-          // Get video details for the most relevant videos
-          const videoDetails = await Promise.all(
-            searchData.items.map(async item => {
-              const detailsResponse = await fetch(
-                `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet,contentDetails&id=${item.id.videoId}&key=${YOUTUBE_API_KEY}`
-              );
-              const detailsData = await detailsResponse.json();
-              return detailsData.items[0];
-            })
-          );
-          
-          // Format the videos with all needed information
-          const videos = videoDetails.map(video => ({
-            id: video.id,
-            title: video.snippet.title,
-            channel: video.snippet.channelTitle,
-            views: parseInt(video.statistics.viewCount).toLocaleString() + " views",
-            likes: parseInt(video.statistics.likeCount || 0).toLocaleString(),
-            duration: video.contentDetails.duration,
-            thumbnail: video.snippet.thumbnails?.high?.url,
-            url: `https://www.youtube.com/watch?v=${video.id}`,
-            publishedAt: video.snippet.publishedAt
-          }));
-          
-          // Sort by relevance (newer videos with decent engagement)
-          return videos.sort((a, b) => {
-            // Calculate a relevance score for each video
-            const scoreA = calculateRelevanceScore(a);
-            const scoreB = calculateRelevanceScore(b);
-            return scoreB - scoreA;
-          });
+        // Check for API errors
+        if (searchData.error) {
+          throw new Error(searchData.error.message);
         }
-        return [];
+        
+        if (!searchData.items || searchData.items.length === 0) {
+          return [];
+        }
+    
+        // Get video details in parallel with timeout
+        const videoDetails = await Promise.all(
+          searchData.items.map(async item => {
+            try {
+              const detailsController = new AbortController();
+              const detailsTimeout = setTimeout(() => detailsController.abort(), 8000);
+              
+              const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=statistics,snippet,contentDetails&id=${item.id.videoId}&key=${YOUTUBE_API_KEY}`;
+              const detailsResponse = await fetch(detailsUrl, { signal: detailsController.signal });
+              clearTimeout(detailsTimeout);
+              
+              if (!detailsResponse.ok) {
+                console.error(`Failed to get details for video ${item.id.videoId}`);
+                return null;
+              }
+              
+              const detailsData = await detailsResponse.json();
+              return detailsData.items?.[0] || null;
+            } catch (error) {
+              console.error(`Error fetching video details for ${item.id.videoId}:`, error);
+              return null;
+            }
+          })
+        ).then(results => results.filter(Boolean)); // Filter out failed requests
+    
+        if (videoDetails.length === 0) {
+          return [];
+        }
+    
+        // Format the videos
+        const videos = videoDetails.map(video => ({
+          id: video.id,
+          title: video.snippet.title,
+          channel: video.snippet.channelTitle,
+          views: parseInt(video.statistics.viewCount).toLocaleString() + " views",
+          likes: parseInt(video.statistics.likeCount || 0).toLocaleString(),
+          duration: video.contentDetails.duration,
+          thumbnail: video.snippet.thumbnails?.high?.url,
+          url: `https://www.youtube.com/watch?v=${video.id}`,
+          publishedAt: video.snippet.publishedAt
+        }));
+    
+        // Sort by relevance
+        const sortedVideos = videos.sort((a, b) => {
+          const scoreA = calculateRelevanceScore(a);
+          const scoreB = calculateRelevanceScore(b);
+          return scoreB - scoreA;
+        });
+    
+        // Cache the results
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data: sortedVideos,
+          timestamp: Date.now()
+        }));
+    
+        return sortedVideos;
       } catch (error) {
         console.error("YouTube search error:", error);
+        
+        // Return cached results even if stale when there's an error
+        if (cached) {
+          return JSON.parse(cached).data;
+        }
+        
         return [];
       }
     }
 
-    // Calculate a relevance score for videos
+    // Calculate a relevance score for videos (unchanged)
     function calculateRelevanceScore(video) {
-      // Factors to consider:
-      // 1. Recency (newer videos get higher score)
       const daysOld = (new Date() - new Date(video.publishedAt)) / (1000 * 60 * 60 * 24);
-      const recencyScore = Math.max(0, 30 - daysOld) / 30; // Normalized to 0-1 for videos up to 30 days old
+      const recencyScore = Math.max(0, 30 - daysOld) / 30;
       
-      // 2. Engagement (likes per view ratio)
       const likeCount = parseInt(video.likes.replace(/\D/g, '')) || 0;
       const viewCount = parseInt(video.views.replace(/\D/g, '')) || 1;
       const engagementScore = likeCount / viewCount;
       
-      // 3. Absolute views (but less important than engagement)
-      const viewsScore = Math.log(viewCount + 1) / 10; // Logarithmic scale
+      const viewsScore = Math.log(viewCount + 1) / 10;
       
-      // Combined score with weights
       return (recencyScore * 0.4) + (engagementScore * 0.4) + (viewsScore * 0.2);
     }
-
-    // Function to format duration (PT1H23M45S -> 1:23:45)
+    
+    // Format duration (unchanged)
     function formatDuration(duration) {
       const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
       const hours = (parseInt(match[1]) || 0);
@@ -840,7 +894,8 @@ body {
         seconds.toString().padStart(2, '0')
       ].filter(Boolean).join(':');
     }
-    // Function to check if element is in viewport
+    
+    // Viewport and visibility functions (unchanged)
     function isInViewport(element) {
       const rect = element.getBoundingClientRect();
       return (
@@ -850,20 +905,13 @@ body {
         rect.right <= (window.innerWidth || document.documentElement.clientWidth)
       );
     }
-
-    // Function to handle video play/pause based on visibility
+    
     function handleVideoVisibility() {
       document.querySelectorAll('.video-container iframe').forEach(video => {
-        if (isInViewport(video)) {
-          // Play video (note: YouTube iframes don't support direct play control)
-          // We'll just make sure it's visible
-          video.style.opacity = '1';
-        } else {
-          // Pause video (again, limited control with iframes)
-          video.style.opacity = '0.5';
-        }
+        video.style.opacity = isInViewport(video) ? '1' : '0.5';
       });
     }
+
 
     // Add scroll event listener for video visibility
     document.addEventListener('DOMContentLoaded', () => {
@@ -1546,7 +1594,7 @@ body {
       let otherImages = [];
       let video = "";
       let videoInfo = null;
-
+    
       // Try to get Wikipedia content first
       try {
         const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`);
@@ -1561,7 +1609,7 @@ body {
       } catch (error) {
         console.error("Wikipedia API error:", error);
       }
-
+    
       // Get additional images from DuckDuckGo
       try {
         const ddgRes = await fetch(`https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1`);
@@ -1575,77 +1623,82 @@ body {
       } catch (error) {
         console.error("DuckDuckGo API error:", error);
       }
-
+    
       // Get YouTube videos - now sorted by relevance
-      const videos = await searchYouTubeVideos(query);
-      if (videos.length > 0) {
-        // Get the most relevant video
-        const bestVideo = videos[0];
-        const duration = formatDuration(bestVideo.duration);
-        
-        // Create download link
-        const downloadLink = `https://en1.savefrom.net/#url=${encodeURIComponent(bestVideo.url)}`;
-        
-        video = `
-          <div class="video-container">
-            <iframe src="https://www.youtube.com/embed/${bestVideo.id}?enablejsapi=1" 
-                    frameborder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
-                    allowfullscreen></iframe>
-            <div class="video-info">
-              <span title="Views">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 5C7 5 2.73 8.11 1 12.5C2.73 16.89 7 20 12 20C17 20 21.27 16.89 23 12.5C21.27 8.11 17 5 12 5ZM12 17.5C9.24 17.5 7 15.26 7 12.5C7 9.74 9.24 7.5 12 7.5C14.76 7.5 17 9.74 17 12.5C17 15.26 14.76 17.5 12 17.5ZM12 9.5C10.34 9.5 9 10.84 9 12.5C9 14.16 10.34 15.5 12 15.5C13.66 15.5 15 14.16 15 12.5C15 10.84 13.66 9.5 12 9.5Z" fill="currentColor"/>
-                </svg>
-                ${bestVideo.views}
-              </span>
-              <span title="Likes">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>
-                </svg>
-                ${bestVideo.likes}
-              </span>
-              <span title="Duration">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/>
-                  <path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z" fill="currentColor"/>
-                </svg>
-                ${duration}
-              </span>
-              <span title="Channel">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" fill="currentColor"/>
-                </svg>
-                ${bestVideo.channel}
-              </span>
-              <a href="${downloadLink}" target="_blank" class="download-link" title="Download">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
-                </svg>
-              </a>
+      try {
+        const videos = await searchYouTubeVideos(query);
+        if (videos.length > 0) {
+          // Get the most relevant video
+          const bestVideo = videos[0];
+          const duration = formatDuration(bestVideo.duration);
+          
+          // Create download link
+          const downloadLink = `https://en1.savefrom.net/#url=${encodeURIComponent(bestVideo.url)}`;
+          
+          video = `
+            <div class="video-container">
+              <iframe src="https://www.youtube.com/embed/${bestVideo.id}?enablejsapi=1" 
+                      frameborder="0" 
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                      allowfullscreen></iframe>
+              <div class="video-info">
+                <span title="Views">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 5C7 5 2.73 8.11 1 12.5C2.73 16.89 7 20 12 20C17 20 21.27 16.89 23 12.5C21.27 8.11 17 5 12 5ZM12 17.5C9.24 17.5 7 15.26 7 12.5C7 9.74 9.24 7.5 12 7.5C14.76 7.5 17 9.74 17 12.5C17 15.26 14.76 17.5 12 17.5ZM12 9.5C10.34 9.5 9 10.84 9 12.5C9 14.16 10.34 15.5 12 15.5C13.66 15.5 15 14.16 15 12.5C15 10.84 13.66 9.5 12 9.5Z" fill="currentColor"/>
+                  </svg>
+                  ${bestVideo.views}
+                </span>
+                <span title="Likes">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="currentColor"/>
+                  </svg>
+                  ${bestVideo.likes}
+                </span>
+                <span title="Duration">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" fill="currentColor"/>
+                    <path d="M12.5 7H11v6l5.25 3.15.75-1.23-4.5-2.67z" fill="currentColor"/>
+                  </svg>
+                  ${duration}
+                </span>
+                <span title="Channel">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5.5-2.5l7.51-3.49L17.5 6.5 9.99 9.99 6.5 17.5zm5.5-6.6c.61 0 1.1.49 1.1 1.1s-.49 1.1-1.1 1.1-1.1-.49-1.1-1.1.49-1.1 1.1-1.1z" fill="currentColor"/>
+                  </svg>
+                  ${bestVideo.channel}
+                </span>
+                <a href="${downloadLink}" target="_blank" class="download-link" title="Download">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" fill="currentColor"/>
+                  </svg>
+                </a>
+              </div>
             </div>
-          </div>
-        `;
-        
-        videoInfo = {
-          title: bestVideo.title,
-          channel: bestVideo.channel
-        };
+          `;
+          
+          videoInfo = {
+            title: bestVideo.title,
+            channel: bestVideo.channel
+          };
+        }
+      } catch (error) {
+        console.error("YouTube search error:", error);
+        // Continue with Wikipedia and images even if YouTube fails
       }
-
+    
       // Create message container
       const msgContainer = document.createElement('div');
       msgContainer.className = 'bot';
-
+    
       // Create main message paragraph
       const msgParagraph = document.createElement('p');
       msgParagraph.textContent = `Here's what I found about "${query}":`;
       msgContainer.appendChild(msgParagraph);
-
+    
       // Create content sections container
       const contentSections = document.createElement('div');
       contentSections.className = 'content-section';
-
+    
       // Add images first (Wikipedia image + other images)
       const allImages = [];
       if (wikipediaImage) allImages.push(wikipediaImage);
@@ -1668,7 +1721,7 @@ body {
         mediaSection.appendChild(imageContainer);
         contentSections.appendChild(mediaSection);
       }
-
+    
       // Add Wikipedia content if available
       if (hasWikipediaContent) {
         const wikiSection = document.createElement('div');
@@ -1693,7 +1746,7 @@ body {
         wikiSection.appendChild(wikiText);
         contentSections.appendChild(wikiSection);
       }
-
+    
       // Add video if available
       if (video) {
         const videoSection = document.createElement('div');
@@ -1701,7 +1754,7 @@ body {
         videoSection.innerHTML = video;
         contentSections.appendChild(videoSection);
       }
-
+    
       // If no content was found at all
       if (!hasWikipediaContent && allImages.length === 0 && !video) {
         const noResultsMsg = document.createElement('p');
@@ -1710,7 +1763,7 @@ body {
       } else {
         msgContainer.appendChild(contentSections);
       }
-
+    
       // Add the message to the chat
       document.getElementById('messages').appendChild(msgContainer);
       document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;
@@ -1741,6 +1794,7 @@ body {
   gtag('js', new Date());
 
   gtag('config', 'G-QCJKG8NXX0');
+  
 </script>
 </body>
 </html>
