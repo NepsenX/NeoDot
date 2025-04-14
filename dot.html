@@ -1584,7 +1584,7 @@ body {
         const duration = formatDuration(bestVideo.duration);
         
         // Create download link
-        const downloadLink = `https://en1.savefrom.net/`;
+        const downloadLink = `https://en1.savefrom.net/#url=${encodeURIComponent(bestVideo.url)}`;
         
         video = `
           <div class="video-container">
@@ -1732,22 +1732,9 @@ body {
 
     // Initialize the app when DOM is loaded
     document.addEventListener('DOMContentLoaded', init);
-</script>
+  </script>
     <!-- Google tag (gtag.js) -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-QCJKG8NXX0"></script>
-<script>
-    // Add this to your existing JavaScript to handle the dropdown
-    document.addEventListener('DOMContentLoaded', function() {
-      document.addEventListener('click', function(e) {
-        // Close all dropdowns when clicking elsewhere
-        if (!e.target.closest('.more-options')) {
-          document.querySelectorAll('.options-dropdown').forEach(dropdown => {
-            dropdown.style.display = 'none';
-          });
-        }
-      });
-    });
-</script>
 <script>
   window.dataLayer = window.dataLayer || [];
   function gtag(){dataLayer.push(arguments);}
