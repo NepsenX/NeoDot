@@ -692,6 +692,10 @@
     // Configuration
     const config = {
         apiKey: "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",
+        apiKey2:"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",
+        apiKey3:"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",
+        apiKey4:"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",
+        apiKey1:"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",
         apiEndpoint: "https://openrouter.ai/api/v1/chat/completions",
         model: "deepseek/deepseek-r1:free",
         temperature: 0.7,
@@ -1664,37 +1668,65 @@
         localStorage.setItem('chats', JSON.stringify(chats));
     }
     async function callOpenRouterAPI(message) {
-        const header = {
-            'Authorization': `Bearer ${config.apiKey}`,
-            'Content-Type': 'application/json',
-            'HTTP-Referer': window.location.href,
-            'X-Title': 'NeoDot (by Nepsen)'
-        };
+        const apiKeys = [
+            config.apiKey,  // Primary key
+            config.apiKey1, // Fallback 1
+            config.apiKey2, // Fallback 2
+            config.apiKey3, // Fallback 3
+            config.apiKey4  // Fallback 4
+        ].filter(Boolean); // Remove empty keys
+    
+        // STRICT NeoDot identity enforcement
+        const fullMessage = [
+            {
+                role: "system",
+                content: "You are **NeoDot**, a logical and structured chatbot created by Nepsen. " +
+                         "You **must always** respond as NeoDot, never as any other AI (e.g., not DeepSeek, ChatGPT, etc.). " +
+                         "Your responses should be concise, technically precise, and maintain a neutral tone. " +
+                         "If asked about your identity, respond: 'I am NeoDot, a logical code-base chatbot by Nepsen.'"
+            },
+            ...(Array.isArray(message) ? message : [message])
+        ];
+    
         const body = {
             model: currentModel,
-            messages: message,
+            messages: fullMessage,
             temperature: config.temperature,
-            max_tokens: config.maxToken
+            max_tokens: config.maxToken,
         };
-
-        try {
-            const response = await fetch(config.apiEndpoint, {
-                method: 'POST',
-                headers: header,
-                body: JSON.stringify(body)
-            });
     
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'NeoDot API request failed');
+        let lastError = null;
+    
+        for (const apiKey of apiKeys) {
+            try {
+                const response = await fetch(config.apiEndpoint, {
+                    method: "POST",
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json',
+                        'HTTP-Referer': window.location.href,
+                        'X-Title': 'NeoDot (by Nepsen)'
+                    },
+                    body: JSON.stringify(body)
+                });
+    
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error?.message || `API error (Key: ${apiKey.slice(0, 5)}...)`);
+                }
+    
+                const data = await response.json();
+                return data.choices?.[0]?.message?.content || "NeoDot couldn't generate a response.";
+    
+            } catch (error) {
+                console.error(`NeoDot API Error (Key: ${apiKey?.slice(0, 5)}...):`, error);
+                lastError = error;
+                await new Promise(resolve => setTimeout(resolve, 500)); // Small delay before retry
             }
-    
-            const data = await response.json();
-            return data.choices[0].message.content;
-        } catch (error) {
-            console.error('NeoDot Error:', error);
-            return `The server is busy. Please try again later.`;
         }
+    
+        console.error("NeoDot: All API keys failed.", lastError);
+        return "NeoDot is currently unavailable. Please try again later.";
     }
     // Update the updateSidebarState function:
     function updateSidebarState() {
