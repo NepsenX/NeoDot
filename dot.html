@@ -1696,8 +1696,10 @@
         };
     
         let lastError = null;
+        let keySpecificErrors = [];
     
-        for (const apiKey of apiKeys) {
+        for (let i = 0; i < apiKeys.length; i++) {
+            const apiKey = apiKeys[i];
             try {
                 const response = await fetch(config.apiEndpoint, {
                     method: "POST",
@@ -1712,21 +1714,31 @@
     
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.error?.message || `API error (Key: ${apiKey.slice(0, 5)}...)`);
+                    const errorMsg = errorData.error?.message || `API error (Key ${i+1}: ${apiKey.slice(0, 5)}...)`;
+                    keySpecificErrors.push(`API Key ${i+1} failed: ${errorMsg}`);
+                    throw new Error(errorMsg);
                 }
     
                 const data = await response.json();
                 return data.choices?.[0]?.message?.content || "NeoDot couldn't generate a response.";
     
             } catch (error) {
-                console.error(`NeoDot API Error (Key: ${apiKey?.slice(0, 5)}...):`, error);
+                console.error(`NeoDot API Error (Key ${i+1}: ${apiKey?.slice(0, 5)}...):`, error);
                 lastError = error;
+                
+                // If this is the last key and we're still failing, show all key-specific errors
+                if (i === apiKeys.length - 1) {
+                    console.error("NeoDot: All API keys failed. Key-specific errors:", keySpecificErrors);
+                    return "NeoDot is currently unavailable. Please try again later.";
+                }
+                
                 await new Promise(resolve => setTimeout(resolve, 500)); // Small delay before retry
             }
         }
     
-        console.error("NeoDot: All API keys failed.", lastError);
-        return "NeoDot is currently unavailable. Please try again later.";
+        // This will only be reached if there are no API keys at all
+        console.error("NeoDot: please try later.");
+        return "NeoDot is currently unavailable. please try later.";
     }
     // Update the updateSidebarState function:
     function updateSidebarState() {
