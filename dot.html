@@ -1,25 +1,26 @@
 <!DOCTYPE html>
 <html lang="en">
-<head> 
+<head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <link rel="icon" type="image/png" href="https://assets.onecompiler.app/438cc35sk/43ekedjqg/Screenshot_2025-04-12_175711-Photoroom-fotor-20250412183519-removebg-preview.png">
+    <link rel="icon" type="image/png" href="https://uploads.onecompiler.io/438cc35sk/43ekedjqg/Screenshot_2025-04-12_175711-Photoroom-fotor-20250412183519-removebg-preview.png">
     <title>NeoDot</title>
     <meta name="description" content="NeoDot is a lightweight web-based chatbot. It responds to user inputs using predefined logic—no AI required!">
     <meta name="keywords" content="chatbot, web chatbot, NeoDot, JavaScript chatbot, simple chat">
-    <meta name="author" content="Web Wizards Studio">
+    <meta name="author" content="Nepsen">
     <meta name="robots" content="index, follow">
     <meta property="og:title" content="NeoDot - A Simple Web Chatbot">
     <meta property="og:description" content="Chat with NeoDot, a lightweight JavaScript-based chatbot. No AI—just fun logic!">
-    <meta property="og:url" content="https://wizstu.github.io/NeoDot/dot.html">
+    <meta property="og:url" content="https://nepsen.github.io/NeoDot/dot.html">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="NeoDot - A Simple Web Chatbot">
     <meta name="twitter:description" content="Try this lightweight JavaScript chatbot!">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="https://nepsen.github.io/cloudgaminghub/1.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen flex">
     <div id="sidebar-overlay" class="sidebar-overlay"></div>
@@ -59,8 +60,7 @@
             </div>
             
             <div class="flex items-center space-x-3">
-                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-800 transition-colors">
-                </button>
+                <!-- Theme toggle button removed -->
             </div>
         </header>
         
@@ -134,246 +134,80 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Input area -->
-        <div class="glass border-t border-gray-800 px-4 py-3">
-            <div class="max-w-3xl mx-auto relative">
-                <textarea id="user-input" rows="1" placeholder="Message NeoDot..." 
-                    class="futuristic-input w-full px-4 py-3 pr-12 glow-effect"
-                    oninput="adjustTextareaHeight()"></textarea>
-                <button id="send-button" onclick="sendMessage()"
-                    class="neon-btn absolute right-2 bottom-2 w-8 h-8 rounded-full flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="fas fa-paper-plane"></i>
+        <!-- File Upload Drop Zone -->
+        <div id="file-upload-container" class="file-upload-container hidden">
+            <div class="file-upload-content">
+                <div class="file-upload-icon">
+                    <i class="fas fa-cloud-upload-alt"></i>
+                </div>
+                <div class="file-upload-text">
+                    <strong>Drag & drop files here</strong> or click to browse
+                </div>
+                <button id="file-upload-button" class="file-upload-button">
+                    <i class="fas fa-folder-open"></i> Select File
                 </button>
-                <div id="error-message" class="text-red-400 text-sm mt-1 text-center"></div>
+                <div class="file-upload-text" style="font-size: 0.8rem;">
+                    Supports images (PNG, JPG) and text files (TXT)
+                </div>
+            </div>
+            <input type="file" id="file-upload-input" class="hidden" accept="image/*, text/*">
+        </div>
+        <!-- Input area -->
+        <div class="chat-input-area">
+            <!-- File Preview and Actions -->
+            <div id="file-preview-area" class="mb-2 w-full max-w-2xl flex flex-col items-center hidden">
+                <!-- This will be the actual "pill" that contains the file info and remove button -->
+                <div id="file-attachment-pill" class="inline-flex items-center bg-gray-700 rounded-full px-3 py-2 text-sm text-gray-200 shadow-md">
+                    <img id="file-preview-thumbnail" class="w-8 h-8 rounded-md mr-2 object-cover hidden" src="" alt="File thumbnail">
+                    <i id="file-icon" class="fas fa-file mr-2 text-gray-400 hidden"></i>
+                    <span id="file-name-display"></span> <!-- Name is now hidden by JS -->
+                    <span id="file-size-display" class="ml-2 text-gray-400 text-xs"></span>
+                    <button id="remove-file-button" class="ml-3 p-1 rounded-full hover:bg-gray-600 text-gray-300">
+                        <i class="fas fa-times text-xs"></i>
+                    </button>
+                </div>
+                <!-- The "Save Image" button is separate and only for images -->
+                <button id="save-image-button" class="neon-btn text-xs mt-2 hidden"><i class="fas fa-download"></i> Save Image</button>
+            </div>
+
+            <div class="chat-input-wrapper">
+                <!-- Hidden file input for programatic click -->
+                <input type="file" id="file-upload" class="hidden" accept="image/*, text/*">
+
+                <textarea id="user-input" rows="1" placeholder="Message NeoDot..." 
+                    oninput="adjustTextareaHeight()"></textarea>
+                
+                <div class="input-buttons">
+                    <button id="summarize-button" onclick="summarizeConversation()"
+                        class="neon-btn transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Summarize Conversation">
+                        <i class="fas fa-file-alt"></i>
+                    </button>
+                    <button id="file-button" 
+                        class="neon-btn transition-colors">
+                        <i class="fas fa-paperclip"></i>
+                    </button>
+                    <button id="voice-button" 
+                        class="neon-btn transition-colors">
+                        <i class="fas fa-microphone"></i>
+                    </button>
+                    <button id="send-button" onclick="sendMessage()"
+                        class="neon-btn transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+                <div id="error-message" class="text-red-400 text-sm mt-1 text-center absolute -bottom-6 left-1/2 -translate-x-1/2 w-full"></div>
             </div>
         </div>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-    <script src="https://nepsen.github.io/cloudgaminghub/920.js"></script> 
+    <script src="https://nepsen.github.io/cloudgaminghub/920.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/blueimp-md5/2.19.0/js/md5.min.js"></script>
     <script src="https://nepsen.github.io/cloudgaminghub/1.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QCJKG8NXX0"></script>
     <script src="https://nepsen.github.io/cloudgaminghub/an.js"></script>
-</body>
-</html>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <style>
-    * { cursor: none; }
-    
-    .cursor {
-      position: fixed;
-      width: 20px;
-      height: 20px;
-      border: 2px solid var(--cursor-color, #000000);
-      border-radius: 50%;
-      background: transparent;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 2147483647; /* Maximum possible z-index */
-      opacity: 0;
-      transition: opacity 0.2s, border-color 0.3s;
-      box-shadow: 0 0 0 1px var(--cursor-outline, rgba(255,255,255,0.5));
-    }
-    
-    .cursor.visible {
-      opacity: 1;
-    }
-    
-    .trail {
-      position: fixed;
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: var(--cursor-color, #000000);
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 2147483646;
-      opacity: 0;
-      transition: opacity 0.1s, background 0.3s;
-    }
-    
-    .trail.visible {
-      opacity: 0.7;
-    }
-    
-    .ripple {
-      position: fixed;
-      border: 2px solid var(--cursor-color, #000000);
-      border-radius: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-      z-index: 2147483645;
-      animation: ripple 0.6s ease-out forwards;
-      box-shadow: 0 0 0 1px var(--cursor-outline, rgba(255,255,255,0.5));
-    }
-    
-    @keyframes ripple {
-      to { 
-        width: 150px; 
-        height: 150px; 
-        opacity: 0; 
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="cursor" id="cursor"></div>
-
-  <!-- Include tinycolor.js for advanced color analysis -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/tinycolor/1.4.2/tinycolor.min.js"></script>
-  
-  <script>
-    (function() {
-      // Memory-efficient implementation
-      const cursor = document.getElementById('cursor');
-      const trails = Array(8).fill(0).map(() => {
-        const t = document.createElement('div');
-        t.className = 'trail';
-        document.body.appendChild(t);
-        return t;
-      });
-      
-      let lastX = 0, lastY = 0;
-      let trailPos = 0;
-      let isCursorInViewport = false;
-      
-      // Advanced background color detection with tinycolor
-      function getContrastColor(x, y) {
-        // Create a temporary element to sample colors
-        const sampler = document.createElement('div');
-        sampler.style.position = 'fixed';
-        sampler.style.width = '1px';
-        sampler.style.height = '1px';
-        sampler.style.left = x + 'px';
-        sampler.style.top = y + 'px';
-        sampler.style.pointerEvents = 'none';
-        sampler.style.opacity = '0';
-        document.body.appendChild(sampler);
-        
-        // Get computed style at this position
-        const bgColor = window.getComputedStyle(sampler).backgroundColor;
-        document.body.removeChild(sampler);
-        
-        // Analyze color with tinycolor
-        const color = tinycolor(bgColor);
-        if (!color.isValid()) return { color: '#000000', outline: 'rgba(255,255,255,0.5)' };
-        
-        // Check if color is very light or very dark
-        const isLight = color.getBrightness() > 180;
-        const isDark = color.getBrightness() < 75;
-        
-        if (isLight) {
-          return { color: '#000000', outline: 'rgba(255,255,255,0.5)' };
-        } else if (isDark) {
-          return { color: '#ffffff', outline: 'rgba(0,0,0,0.5)' };
-        }
-        
-        // For mid-tone colors, use high contrast
-        return color.isLight() ? 
-          { color: '#000000', outline: 'rgba(255,255,255,0.8)' } : 
-          { color: '#ffffff', outline: 'rgba(0,0,0,0.8)' };
-      }
-      
-      // Check if cursor is in viewport
-      function checkCursorInViewport(x, y) {
-        const wasInViewport = isCursorInViewport;
-        isCursorInViewport = (
-          x >= 0 && 
-          x <= window.innerWidth && 
-          y >= 0 && 
-          y <= window.innerHeight
-        );
-        
-        if (isCursorInViewport !== wasInViewport) {
-          cursor.classList.toggle('visible', isCursorInViewport);
-        }
-      }
-      
-      // Efficient animation loop
-      function updateCursor(x, y) {
-        checkCursorInViewport(x, y);
-        
-        if (!isCursorInViewport) return;
-        
-        // Update cursor color based on current background
-        const { color, outline } = getContrastColor(x, y);
-        document.documentElement.style.setProperty('--cursor-color', color);
-        document.documentElement.style.setProperty('--cursor-outline', outline);
-        
-        cursor.style.left = x + 'px';
-        cursor.style.top = y + 'px';
-        
-        // Update trails in a circular buffer pattern
-        const t = trails[trailPos];
-        t.style.left = x + 'px';
-        t.style.top = y + 'px';
-        t.classList.add('visible');
-        setTimeout(() => t.classList.remove('visible'), 100);
-        trailPos = (trailPos + 1) % trails.length;
-        
-        lastX = x;
-        lastY = y;
-      }
-      
-      // Throttled mousemove handler
-      let lastUpdate = 0;
-      function handleMouseMove(e) {
-        const now = performance.now();
-        if (now - lastUpdate >= 16) { // ~60fps
-          requestAnimationFrame(() => updateCursor(e.clientX, e.clientY));
-          lastUpdate = now;
-        }
-      }
-      
-      // Mouse handling
-      document.addEventListener('mousemove', handleMouseMove);
-      
-      document.addEventListener('mouseleave', () => {
-        cursor.classList.remove('visible');
-      });
-      
-      document.addEventListener('mouseenter', () => {
-        if (isCursorInViewport) {
-          cursor.classList.add('visible');
-        }
-      });
-      
-      document.addEventListener('click', (e) => {
-        if (!isCursorInViewport) return;
-        
-        const ripple = document.createElement('div');
-        ripple.className = 'ripple';
-        ripple.style.left = e.clientX + 'px';
-        ripple.style.top = e.clientY + 'px';
-        ripple.style.width = '0';
-        ripple.style.height = '0';
-        document.body.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 600);
-        
-        cursor.style.transform = 'translate(-50%, -50%) scale(0.7)';
-        setTimeout(() => {
-          cursor.style.transform = 'translate(-50%, -50%) scale(1)';
-        }, 100);
-      });
-      
-      // Touch device detection
-      if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
-        cursor.style.display = 'none';
-        trails.forEach(t => t.style.display = 'none');
-      }
-      
-      // Initial cursor position
-      cursor.style.left = '0px';
-      cursor.style.top = '0px';
-    })();
-  </script>
 </body>
 </html>
