@@ -397,9 +397,13 @@
     </div>
 
     <script>
+        console.log("Script starting..."); // Added for debugging
+
         // Get references to HTML elements
         const themeToggle = document.getElementById('themeToggle');
         const themeIcon = document.getElementById('themeIcon');
+        // Removed settingsButton from HTML, so remove its reference here
+        // const settingsButton = document.getElementById('settingsButton'); // This line is now removed
         const aiCircleButton = document.getElementById('aiCircleButton');
         const aiGif = document.getElementById('aiGif');
         const statusLine = document.getElementById('statusLine');
@@ -619,7 +623,7 @@
                     aiGif.style.filter = 'grayscale(0.2)';
                     break;
                 case 'ready':
-                    statusLine.textContent = "Ready. Speak anytime or type below.";
+                    statusLine.textContent = "Ready. Tap the circle to speak or open settings.";
                     manualTextInput.placeholder = "Speak or type your question here...";
                     aiCircleButton.style.backgroundColor = '#4f46e5';
                     aiGif.style.filter = 'grayscale(0.7)';
@@ -707,37 +711,45 @@
 
             let selectedVoice = null;
             // Filter voices by the selected language first, then by gender
-            const voicesForLang = availableVoices.filter(voice => voice.lang.startsWith(langHint.split('-')[0]));
+            // Use the base language code for filtering (e.g., 'en' from 'en-US')
+            const baseLangCode = langHint.split('-')[0];
+            const voicesForLang = availableVoices.filter(voice => voice.lang.startsWith(baseLangCode));
+            console.log(`Attempting to synthesize speech for language: ${langHint}, gender: ${genderHint}`);
+            console.log("Available voices for selected language:", voicesForLang.map(v => v.name));
+
 
             if (genderHint === 'man') {
                 selectedVoice = voicesForLang.find(voice =>
                     voice.name.toLowerCase().includes('male') ||
                     voice.name.toLowerCase().includes('david') ||
                     voice.name.toLowerCase().includes('paul') ||
-                    (voice.name.toLowerCase().includes('google us english') && voice.name.toLowerCase().includes('male'))
+                    (voice.name.toLowerCase().includes('google') && voice.name.toLowerCase().includes('male')) // More general Google male voice
                 );
             } else if (genderHint === 'woman') {
                 selectedVoice = voicesForLang.find(voice =>
                     voice.name.toLowerCase().includes('female') ||
                     voice.name.toLowerCase().includes('zira') ||
                     voice.name.toLowerCase().includes('sara') ||
-                    (voice.name.toLowerCase().includes('google us english') && voice.name.toLowerCase().includes('female'))
+                    (voice.name.toLowerCase().includes('google') && voice.name.toLowerCase().includes('female')) // More general Google female voice
                 );
             }
 
             // Fallback to any voice for the language, then any default, then first available
             if (!selectedVoice && voicesForLang.length > 0) {
                 selectedVoice = voicesForLang.find(voice => voice.default) || voicesForLang[0];
+                console.warn(`No specific gender voice found for ${langHint}, falling back to default/first voice for this language: ${selectedVoice ? selectedVoice.name : 'None'}`);
             } else if (!selectedVoice) {
                 selectedVoice = availableVoices.find(voice => voice.default) || availableVoices[0];
+                console.warn(`No voice found for language ${langHint}, falling back to browser default: ${selectedVoice ? selectedVoice.name : 'None'}`);
             }
 
             if (selectedVoice) {
                 utterance.voice = selectedVoice;
                 utterance.lang = selectedVoice.lang; // Ensure utterance uses the voice's specific language code
+                console.log(`Using voice: ${selectedVoice.name} (${selectedVoice.lang})`);
             } else {
-                console.warn("No suitable voice found for selected language and gender, using browser default.");
-                utterance.lang = langHint; // Fallback to selected language hint
+                console.warn("No suitable voice found at all, using browser default settings for utterance.");
+                utterance.lang = langHint; // Fallback to selected language hint if no voice is found
             }
 
             utterance.onstart = () => {
@@ -746,13 +758,13 @@
 
             utterance.onend = () => {
                 isSpeaking = false;
-                updateUIState('ready');
+                updateUIState('ready'); // Set to ready after speaking
             };
 
             utterance.onerror = (event) => {
                 isSpeaking = false;
                 console.error('Speech synthesis error:', event.error);
-                updateUIState('error', `Speech synthesis failed: ${event.error}`);
+                updateUIState('error', `Speech synthesis failed: ${event.error}. Text was: "${text}"`);
             };
 
             window.speechSynthesis.speak(utterance);
@@ -780,6 +792,55 @@
             document.body.style.setProperty('--dynamic-background-image', `url('${backgroundImageUrl}')`);
         }
 
+        // Function to build prompt with memory for Pollinations.AI
+        function buildPromptWithMemory(chatHistory, currentInput) {
+            let formattedPrompt = '';
+            const relevantMessages = [];
+
+            // Get the last 5 messages (user or model), ensuring they alternate roles
+            // Iterate backwards to get the most recent messages
+            for (let i = chatHistory.length - 1; i >= 0 && relevantMessages.length < 5; i--) {
+                const msg = chatHistory[i];
+                // Ensure we only add user and model messages
+                if (msg.role === 'user' || msg.role === 'model') {
+                    relevantMessages.unshift(msg); // Add to the beginning to maintain chronological order
+                }
+            }
+
+            // Format the relevant messages without explicit "User:" or "Assistant:" labels
+            relevantMessages.forEach(msg => {
+                const text = msg.parts?.map(part => part.text || '').join(' ').trim();
+                if (text) {
+                    formattedPrompt += `${text}\n`;
+                }
+            });
+
+            formattedPrompt += `${currentInput}`; // The current user input
+
+            return formattedPrompt;
+        }
+
+        // Main function to generate the URL and handle fallback
+        async function generatePollinationsUrl(chatHistory, currentInput) {
+            const prompt = buildPromptWithMemory(chatHistory, currentInput);
+            const encodedPrompt = encodeURIComponent(prompt);
+
+            const primaryUrl = `https://text.pollinations.ai/${encodedPrompt}`;
+            const fallbackUrl = `https://text.pollinations.ai/${encodeURIComponent(currentInput)}`;
+
+            try {
+                const res = await fetch(primaryUrl);
+                if (!res.ok) {
+                    console.warn(`Primary Pollinations.ai URL failed (${res.status}). Falling back to simpler prompt.`);
+                    throw new Error('Primary failed');
+                }
+                return primaryUrl;
+            } catch (err) {
+                console.error("Error fetching primary Pollinations URL, using fallback:", err);
+                return fallbackUrl;
+            }
+        }
+
         async function processUserInput(input, isSpeech = true) {
             stopAllAIActivity();
 
@@ -788,6 +849,7 @@
                 updateUIState('ready');
                 return;
             }
+            // formattedInput is no longer directly used for Pollinations.AI URL, but kept for background image
             let formattedInput = originalInput.replace(/\s+/g, '-').replace(/_/g, '-');
 
             // Update background image based on user message
@@ -802,9 +864,9 @@
             updateUIState('generating');
 
             try {
-                // Pollinations API for text generation (assuming it generates text based on input)
-                const textApiUrl = `https://text.pollinations.ai/${encodeURIComponent(formattedInput)}`;
-                const textResponse = await fetch(textApiUrl);
+                // Use the new generatePollinationsUrl function to get the URL with memory
+                const urlToFetch = await generatePollinationsUrl(conversationHistory, originalInput);
+                const textResponse = await fetch(urlToFetch);
 
                 if (!textResponse.ok) {
                     const errorText = await textResponse.text();
@@ -812,7 +874,7 @@
                 }
 
                 const aiTextResponse = await textResponse.text();
-                console.log("AI Text Response:", aiTextResponse);
+                console.log("AI Text Response:", aiTextResponse); // Log AI response to check its language
 
                 // Add AI message to conversation history
                 conversationHistory.push({ role: 'model', parts: [{ text: aiTextResponse }], timestamp: new Date().toISOString() });
@@ -829,6 +891,8 @@
             }
         }
 
+        let isRecognitionActive = false; // Track if recognition is explicitly started by user
+
         function startSpeechRecognition() {
             if (!SpeechRecognition) {
                 updateUIState('no-support');
@@ -836,7 +900,7 @@
             }
 
             if (recognition && (recognition.recognizing || recognition.listening)) {
-                recognition.stop();
+                recognition.stop(); // Stop any existing recognition instance
             }
 
             recognition = new SpeechRecognition();
@@ -846,6 +910,7 @@
 
             recognition.onstart = () => {
                 updateUIState('listening');
+                isRecognitionActive = true;
                 console.log("Speech recognition started.");
             };
 
@@ -858,8 +923,9 @@
 
             recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
+                isRecognitionActive = false; // Reset active state on error
                 if (event.error === 'no-speech') {
-                    updateUIState('ready', "No speech detected. Please try again.");
+                    updateUIState('ready', "No speech detected. Tap the circle to speak again.");
                 } else if (event.error === 'not-allowed') {
                     updateUIState('error', "Microphone access denied. Please allow microphone in browser settings.");
                 } else {
@@ -868,20 +934,8 @@
             };
 
             recognition.onend = () => {
-                if (!isSpeaking) { // Only set to ready if AI isn't speaking
-                    updateUIState('ready');
-                    // Attempt to restart recognition after it ends, if not in an error state
-                    if (!statusLine.textContent.includes("Error") && !statusLine.textContent.includes("not supported")) {
-                        setTimeout(() => {
-                            try {
-                                recognition.start();
-                            } catch (e) {
-                                console.error("Failed to restart recognition onend:", e);
-                                updateUIState('error', "Failed to restart listening. Please refresh or use text input.");
-                            }
-                        }, 1000); // Small delay before restarting
-                    }
-                }
+                isRecognitionActive = false; // Recognition ended, reset active state
+                updateUIState('ready'); // Set to ready after recognition ends
                 console.log("Speech recognition ended.");
             };
 
@@ -890,12 +944,14 @@
             } catch (e) {
                 console.error("Error starting speech recognition:", e);
                 updateUIState('error', "Could not start speech recognition. Is your microphone ready?");
+                isRecognitionActive = false; // Ensure state is false if start fails
             }
         }
 
         function stopSpeechRecognition() {
             if (recognition && (recognition.recognizing || recognition.listening)) {
                 recognition.stop();
+                isRecognitionActive = false; // Explicitly set to false when stopped
             }
         }
 
@@ -979,10 +1035,11 @@
                 localStorage.setItem('selectedLanguage', currentLanguage);
                 console.log("Language saved:", currentLanguage);
                 settingsChanged = true;
-                // Restart recognition with new language if it was active
-                if (recognition && (recognition.recognizing || recognition.listening)) {
+                // If recognition was active, stop and restart it with the new language
+                if (isRecognitionActive) { // Use the flag here
                     stopSpeechRecognition();
-                    startSpeechRecognition();
+                    stopSpeechSynthesis(); // Stop speech synthesis immediately before restarting recognition
+                    startSpeechRecognition(); // Restart recognition with new language
                 }
             }
 
@@ -1005,17 +1062,17 @@
             synthesizeSpeech("Hello! How can I help you?", currentVoiceModel, selectedLang);
         });
 
-
-        // Event listener for AI circle button (single click for model changer, stop when busy)
+        // Event listener for AI circle button (toggle listening or open settings)
         aiCircleButton.addEventListener('click', () => {
             if (isSpeaking || statusLine.textContent.includes("Processing") || statusLine.textContent.includes("Generating")) {
                 // If AI is actively speaking, processing, or generating, a single click stops all activity
                 stopAllAIActivity();
-            } else {
-                // If AI is ready or just listening, a single click opens the Voice Model Modal
-                openVoiceModelModal();
-                // When modal opens, stop any ongoing recognition to prevent conflicts
+            } else if (isRecognitionActive) { // Check if recognition is currently active
+                // If recognition is currently active, stop it
                 stopSpeechRecognition();
+            } else {
+                // If AI is ready and not listening, open the settings modal
+                openVoiceModelModal();
             }
         });
 
@@ -1024,7 +1081,7 @@
             clearTimeout(typingTimer);
             if (manualTextInput.value) {
                 // If there's text, pause speech recognition
-                if (recognition && (recognition.recognizing || recognition.listening)) {
+                if (isRecognitionActive) { // Check if recognition is active
                     stopSpeechRecognition();
                 }
                 typingTimer = setTimeout(() => {
@@ -1035,7 +1092,7 @@
                     processUserInput(manualTextInput.value, false);
                 }, doneTypingInterval);
             } else {
-                // If text input is cleared, go back to ready state and allow voice input
+                // If text input is cleared, go back to ready state
                 updateUIState('ready');
             }
         });
@@ -1070,14 +1127,15 @@
 
         // Initial setup on page load
         document.addEventListener('DOMContentLoaded', async () => {
+            console.log("DOMContentLoaded fired."); // Added for debugging
             updateUIState('initializing');
             loadChat(); // Initialize or load chat history
             populateLanguageDropdown(); // Populate dropdown early
             await loadVoices(); // Pre-load voices for faster synthesis
             updateUIState('ready');
-            // Start speech recognition automatically after initial setup
-            startSpeechRecognition();
+            // Do NOT automatically start speech recognition on load. User must tap the circle.
         });
+        console.log("Script finished loading."); // Added for debugging
     </script>
     <script async src="https://www.googletagmanager.com/gtag/js?id=G-QCJKG8NXX0"></script>
     <script src="https://nepsen.github.io/cloudgaminghub/an.js"></script>
