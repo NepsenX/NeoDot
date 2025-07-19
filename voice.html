@@ -374,17 +374,24 @@
     <!-- Voice Model Selection Modal -->
     <div id="voiceModelModal" class="modal-overlay hidden">
         <div class="modal-content">
-            <h2 class="text-2xl font-bold text-white mb-6">Select Voice Model</h2>
-            <div class="voice-model-selection">
+            <h2 class="text-2xl font-bold text-white mb-6">Settings</h2>
+            <div class="voice-model-selection mb-4">
                 <label for="modalVoiceModel" class="block text-gray-400 text-sm font-medium mb-2">Choose Voice:</label>
                 <select id="modalVoiceModel" class="w-full p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                     <option value="man" data-gender="male" selected>Man</option>
                     <option value="woman" data-gender="female">Woman</option>
                 </select>
             </div>
+            <!-- New Language Selection Dropdown -->
+            <div class="language-selection mb-4">
+                <label for="modalLanguage" class="block text-gray-400 text-sm font-medium mb-2">Input Language:</label>
+                <select id="modalLanguage" class="w-full p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
             <div class="modal-buttons">
                 <button id="closeModalButton" class="button-secondary">Close</button>
-                <button id="saveModelButton" class="button-primary">Save Selection</button>
+                <button id="saveModelButton" class="button-primary">Save Settings</button>
             </div>
         </div>
     </div>
@@ -401,6 +408,7 @@
         const closeModalButton = document.getElementById('closeModalButton');
         const saveModelButton = document.getElementById('saveModelButton');
         const modalVoiceModelSelect = document.getElementById('modalVoiceModel');
+        const modalLanguageSelect = document.getElementById('modalLanguage'); // New language select
 
         const manualTextInput = document.getElementById('manualTextInput');
 
@@ -408,6 +416,7 @@
         let recognition;
         let isSpeaking = false;
         let currentVoiceModel = modalVoiceModelSelect.value;
+        let currentLanguage = 'en-US'; // Default language
         let availableVoices = [];
         let typingTimer;
         const doneTypingInterval = 1000; // 1 second
@@ -431,6 +440,24 @@
             return `Voice Chat (${day}.${month}.${year})`;
         }
 
+        // Function to check if we need to create a new chat for today
+        function shouldCreateNewChat() {
+            if (!currentChatId) return true;
+            
+            // Get current chat from chats array
+            const currentChat = chats.find(c => c.id === currentChatId);
+            if (!currentChat) return true;
+            
+            // Parse the chat's creation date
+            const chatDate = new Date(currentChat.createdAt);
+            const today = new Date();
+            
+            // Compare year, month, and day
+            return chatDate.getFullYear() !== today.getFullYear() ||
+                   chatDate.getMonth() !== today.getMonth() ||
+                   chatDate.getDate() !== today.getDate();
+        }
+
         /**
          * Loads the last active chat session or initializes a new one.
          * It also loads the conversation history for the determined current chat.
@@ -447,9 +474,25 @@
             if (lastActiveChatId) {
                 const foundChat = chats.find(c => c.id === lastActiveChatId);
                 if (foundChat) {
-                    currentChatId = lastActiveChatId;
-                    chatFound = true;
-                    console.log(`Loaded last active chat ID: ${currentChatId}`);
+                    // Check if we need to create a new chat for today
+                    if (shouldCreateNewChat()) {
+                        console.log("Creating new chat for today...");
+                        currentChatId = generateChatId();
+                        const newChatTitle = generateVoiceChatTitle();
+                        const newChatEntry = {
+                            id: currentChatId,
+                            title: newChatTitle,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString(),
+                            type: 'voice'
+                        };
+                        chats.unshift(newChatEntry);
+                        chatFound = true;
+                    } else {
+                        currentChatId = lastActiveChatId;
+                        chatFound = true;
+                        console.log(`Loaded last active chat ID: ${currentChatId}`);
+                    }
                 } else {
                     console.warn(`Last active chat ID ${lastActiveChatId} not found in current chats list. It might have been deleted or is stale.`);
                 }
@@ -644,7 +687,7 @@
             });
         }
 
-        async function synthesizeSpeech(text, genderHint = currentVoiceModel) {
+        async function synthesizeSpeech(text, genderHint = currentVoiceModel, langHint = currentLanguage) {
             if (!window.speechSynthesis) {
                 console.error("Web Speech Synthesis not supported in this browser.");
                 return;
@@ -663,17 +706,18 @@
             }
 
             let selectedVoice = null;
-            const englishVoices = availableVoices.filter(voice => voice.lang.startsWith('en'));
+            // Filter voices by the selected language first, then by gender
+            const voicesForLang = availableVoices.filter(voice => voice.lang.startsWith(langHint.split('-')[0]));
 
             if (genderHint === 'man') {
-                selectedVoice = englishVoices.find(voice =>
+                selectedVoice = voicesForLang.find(voice =>
                     voice.name.toLowerCase().includes('male') ||
                     voice.name.toLowerCase().includes('david') ||
                     voice.name.toLowerCase().includes('paul') ||
                     (voice.name.toLowerCase().includes('google us english') && voice.name.toLowerCase().includes('male'))
                 );
             } else if (genderHint === 'woman') {
-                selectedVoice = englishVoices.find(voice =>
+                selectedVoice = voicesForLang.find(voice =>
                     voice.name.toLowerCase().includes('female') ||
                     voice.name.toLowerCase().includes('zira') ||
                     voice.name.toLowerCase().includes('sara') ||
@@ -681,16 +725,19 @@
                 );
             }
 
-            if (!selectedVoice && englishVoices.length > 0) {
-                selectedVoice = englishVoices.find(voice => voice.default) || englishVoices[0];
+            // Fallback to any voice for the language, then any default, then first available
+            if (!selectedVoice && voicesForLang.length > 0) {
+                selectedVoice = voicesForLang.find(voice => voice.default) || voicesForLang[0];
             } else if (!selectedVoice) {
-                selectedVoice = availableVoices[0];
+                selectedVoice = availableVoices.find(voice => voice.default) || availableVoices[0];
             }
 
             if (selectedVoice) {
                 utterance.voice = selectedVoice;
+                utterance.lang = selectedVoice.lang; // Ensure utterance uses the voice's specific language code
             } else {
-                console.warn("No suitable voice found, using browser default.");
+                console.warn("No suitable voice found for selected language and gender, using browser default.");
+                utterance.lang = langHint; // Fallback to selected language hint
             }
 
             utterance.onstart = () => {
@@ -711,15 +758,40 @@
             window.speechSynthesis.speak(utterance);
         }
 
+        // Function to play hello sound based on current voice model and language
+        function playHelloSound() {
+            // Stop any ongoing speech synthesis before playing the new sound
+            if (window.speechSynthesis.speaking) {
+                window.speechSynthesis.cancel();
+            }
+
+            const helloText = "Hello! How can I help you?";
+            synthesizeSpeech(helloText, currentVoiceModel, currentLanguage);
+        }
+
+        // Function to update the background image based on user message
+        function updateBackgroundImage(message) {
+            if (!message || message.trim() === '') return;
+            
+            const formattedInput = message.trim().replace(/\s+/g, '-').replace(/_/g, '-');
+            const backgroundImageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(formattedInput)}`;
+            
+            // Set the background image with a smooth transition
+            document.body.style.setProperty('--dynamic-background-image', `url('${backgroundImageUrl}')`);
+        }
+
         async function processUserInput(input, isSpeech = true) {
             stopAllAIActivity();
 
-            let originalInput = input.trim();//copy from NeoDot (created by Nepsen)
+            let originalInput = input.trim();
             if (!originalInput) {
                 updateUIState('ready');
                 return;
             }
             let formattedInput = originalInput.replace(/\s+/g, '-').replace(/_/g, '-');
+
+            // Update background image based on user message
+            updateBackgroundImage(originalInput);
 
             // Add user message to conversation history
             conversationHistory.push({ role: 'user', parts: [{ text: originalInput }], timestamp: new Date().toISOString() });
@@ -746,8 +818,8 @@
                 conversationHistory.push({ role: 'model', parts: [{ text: aiTextResponse }], timestamp: new Date().toISOString() });
                 saveConversation(); // Save after AI response
 
-                // Synthesize the AI's text response into speech
-                await synthesizeSpeech(aiTextResponse, currentVoiceModel);
+                // Synthesize the AI's text response into speech using the current voice model and language
+                await synthesizeSpeech(aiTextResponse, currentVoiceModel, currentLanguage);
 
             } catch (error) {
                 console.error("Error during AI response generation or speech synthesis:", error);
@@ -770,7 +842,7 @@
             recognition = new SpeechRecognition();
             recognition.continuous = false; // We want a single utterance
             recognition.interimResults = false; // Get final results only
-            recognition.lang = 'en-US'; // Set language
+            recognition.lang = currentLanguage; // Use the selected language
 
             recognition.onstart = () => {
                 updateUIState('listening');
@@ -840,10 +912,47 @@
             updateUIState('ready'); // Reset UI to ready state
         }
 
+        // --- Language Options Data ---
+        const languageOptions = [
+            { code: 'en-US', name: 'English (US)' },
+            { code: 'en-GB', name: 'English (UK)' },
+            { code: 'es-ES', name: 'Spanish (Spain)' },
+            { code: 'fr-FR', name: 'French (France)' },
+            { code: 'de-DE', name: 'German (Germany)' },
+            { code: 'it-IT', name: 'Italian (Italy)' },
+            { code: 'ja-JP', name: 'Japanese (Japan)' },
+            { code: 'ko-KR', name: 'Korean (Korea)' },
+            { code: 'zh-CN', name: 'Chinese (Mandarin, Simplified)' },
+            { code: 'pt-BR', name: 'Portuguese (Brazil)' },
+            { code: 'ru-RU', name: 'Russian (Russia)' },
+            { code: 'ar-SA', name: 'Arabic (Saudi Arabia)' },
+            { code: 'hi-IN', name: 'Hindi (India)' },
+            { code: 'bn-BD', name: 'Bengali (Bangladesh)' },
+            { code: 'bn-IN', name: 'Bengali (India)' }
+            // Add more languages as needed
+        ];
+
+        // Function to populate language dropdown
+        function populateLanguageDropdown() {
+            modalLanguageSelect.innerHTML = ''; // Clear existing options
+            languageOptions.forEach(lang => {
+                const option = document.createElement('option');
+                option.value = lang.code;
+                option.textContent = lang.name;
+                modalLanguageSelect.appendChild(option);
+            });
+            // Set the selected value after populating
+            modalLanguageSelect.value = currentLanguage;
+        }
+
         // --- Voice Model Modal Logic ---
         function openVoiceModelModal() {
             // Pre-select the currently active voice model in the modal
             modalVoiceModelSelect.value = currentVoiceModel;
+            // Populate and pre-select the current language
+            populateLanguageDropdown();
+            modalLanguageSelect.value = currentLanguage;
+
             voiceModelModal.classList.remove('hidden');
         }
 
@@ -853,11 +962,49 @@
 
         closeModalButton.addEventListener('click', closeVoiceModelModal);
         saveModelButton.addEventListener('click', () => {
-            currentVoiceModel = modalVoiceModelSelect.value;
-            localStorage.setItem('selectedVoiceModel', currentVoiceModel);
-            console.log("Voice model saved:", currentVoiceModel);
+            const newVoiceModel = modalVoiceModelSelect.value;
+            const newLanguage = modalLanguageSelect.value;
+
+            let settingsChanged = false;
+
+            if (newVoiceModel !== currentVoiceModel) {
+                currentVoiceModel = newVoiceModel;
+                localStorage.setItem('selectedVoiceModel', currentVoiceModel);
+                console.log("Voice model saved:", currentVoiceModel);
+                settingsChanged = true;
+            }
+            
+            if (newLanguage !== currentLanguage) {
+                currentLanguage = newLanguage;
+                localStorage.setItem('selectedLanguage', currentLanguage);
+                console.log("Language saved:", currentLanguage);
+                settingsChanged = true;
+                // Restart recognition with new language if it was active
+                if (recognition && (recognition.recognizing || recognition.listening)) {
+                    stopSpeechRecognition();
+                    startSpeechRecognition();
+                }
+            }
+
+            if (settingsChanged) {
+                playHelloSound(); // Play hello sound if any setting changed
+            }
             closeVoiceModelModal();
         });
+
+        // Event listener to play sound on voice model change within modal
+        modalVoiceModelSelect.addEventListener('change', () => {
+            const selectedGender = modalVoiceModelSelect.value;
+            const selectedLang = modalLanguageSelect.value; // Use the currently selected language in the modal
+            synthesizeSpeech("Hello! How can I help you?", selectedGender, selectedLang);
+        });
+
+        // Event listener to play sound on language change within modal (using current voice model)
+        modalLanguageSelect.addEventListener('change', () => {
+            const selectedLang = modalLanguageSelect.value;
+            synthesizeSpeech("Hello! How can I help you?", currentVoiceModel, selectedLang);
+        });
+
 
         // Event listener for AI circle button (single click for model changer, stop when busy)
         aiCircleButton.addEventListener('click', () => {
@@ -907,17 +1054,25 @@
             }
         });
 
-        // Load saved voice model on startup
+        // Load saved voice model and language on startup
         const savedVoiceModel = localStorage.getItem('selectedVoiceModel');
         if (savedVoiceModel) {
             currentVoiceModel = savedVoiceModel;
             modalVoiceModelSelect.value = currentVoiceModel; // Set modal's default value
         }
 
+        const savedLanguage = localStorage.getItem('selectedLanguage');
+        if (savedLanguage) {
+            currentLanguage = savedLanguage;
+            // The dropdown will be populated and set in openVoiceModelModal or populateLanguageDropdown
+        }
+
+
         // Initial setup on page load
         document.addEventListener('DOMContentLoaded', async () => {
             updateUIState('initializing');
             loadChat(); // Initialize or load chat history
+            populateLanguageDropdown(); // Populate dropdown early
             await loadVoices(); // Pre-load voices for faster synthesis
             updateUIState('ready');
             // Start speech recognition automatically after initial setup
