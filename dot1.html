@@ -2684,12 +2684,6 @@ body[data-theme="light-blue"] #voice-button {
 <script>    // Initialize Mermaid.js configuration
     // This will be called once the window has fully loaded to ensure Mermaid library is available.
     window.onload = function() {
-        // Ensure Mermaid is initialized only if the 'mermaid' object is available
-        if (typeof mermaid !== 'undefined') {
-            mermaid.initialize({ startOnLoad: true, theme: 'dark' });
-        } else {
-            console.error('Mermaid.js library not found. Diagrams will not render.');
-        }
         init(); // Call the main initialization function after all resources are loaded
     };
 
