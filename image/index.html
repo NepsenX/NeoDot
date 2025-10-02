@@ -1,8 +1,6 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width; height=device-height;">
-  <link rel="stylesheet" href="resource://content-accessible/ImageDocument.css">
-  <link rel="stylesheet" href="resource://content-accessible/TopLevelImageDocument.css">
     <title></title>
     <style>  
         .loading {
@@ -26,7 +24,6 @@
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             const img = document.getElementById('generatedImage');
-            const loading = document.getElementById('loading');
             
             // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
