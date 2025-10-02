@@ -40,32 +40,28 @@
         document.addEventListener('DOMContentLoaded', function() {
             const generatedImage = document.getElementById('generatedImage');
             
-            // Get the full URL path
-            const fullPath = window.location.pathname;
+            // Get URL parameters
+            const urlParams = new URLSearchParams(window.location.search);
+            const text = urlParams.get('text');
+            const model = urlParams.get('model') || 'auto';
             
-            // Extract the prompt from the URL
-            // URL format: /NeoDot/image/your-prompt-here
-            const pathSegments = fullPath.split('/');
-            
-            // Find the position of "image" in the path
-            const imageIndex = pathSegments.indexOf('image');
-            
-            if (imageIndex !== -1 && pathSegments.length > imageIndex + 1) {
-                // Get everything after "image/" as the prompt
-                const prompt = pathSegments.slice(imageIndex + 1).join('/');
+            if (text && text.trim() !== '') {
+                // Create the Pollinations.ai image URL
+                const encodedPrompt = encodeURIComponent(text);
+                let imageSrc;
                 
-                if (prompt && prompt.trim() !== '') {
-                    // Create the Pollinations.ai image URL
-                    const encodedPrompt = encodeURIComponent(prompt);
-                    const imageSrc = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
-                    
-                    // Set the image source
-                    generatedImage.src = imageSrc;
-                    generatedImage.alt = prompt;
-                    
-                    // Update page title with the prompt
-                    document.title = prompt;
+                if (model && model !== 'auto') {
+                    imageSrc = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=${model}`;
+                } else {
+                    imageSrc = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
                 }
+                
+                // Set the image source
+                generatedImage.src = imageSrc;
+                generatedImage.alt = text;
+                
+                // Update page title with the prompt
+                document.title = text;
             }
         });
     </script>
