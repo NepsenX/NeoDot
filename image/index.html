@@ -23,23 +23,23 @@
         document.addEventListener('DOMContentLoaded', async function() {
             const img = document.getElementById('generatedImage');
             
-            // Get URL parameters
+            // Get all URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const text = urlParams.get('text');
             const model = urlParams.get('model');
             const size = urlParams.get('size');
             const userUrl = urlParams.get('url');
-            const seed = urlParams.get('seed');
+            const seedParam = urlParams.get('seed');
             
+            // Set the final seed
+            const finalSeed = seedParam ? seedParam : Math.floor(Math.random() * 999999) + 1;
+            
+            // Validate that a text prompt exists
             if (!text) {
-                document.title = "No prompt provided";
+                document.title = "Error: No prompt provided";
                 return;
             }
-            
             document.title = text;
-            
-            // Generate random seed if not provided
-            const finalSeed = seed || Math.floor(Math.random() * 999999) + 1;
             
             try {
                 // Step 1: Get enhanced prompt from OpenAI
@@ -47,49 +47,51 @@
                 const promptResponse = await fetch(openaiPromptUrl);
                 const enhancedPrompt = await promptResponse.text();
                 
-                // Step 2: Build image URL based on parameters
+                // Step 2: Determine the correct Pollinations.ai URL based on the parameters
                 let imageUrl;
-                
+                const token = "vHigSh5nPMrSeQbx"; // Your token for specific models
+
+                // SCENARIO 1: If a URL is provided, use the 'kontext' model
                 if (userUrl) {
-                    // If URL provided, use kontext model
-                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true`;
-                } else if (model) {
-                    // If model specified, use it
-                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
-                } else {
-                    // Default: try seedream first, then flex as fallback
-                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=seedream&enhance=true&seed=${finalSeed}&token=vHigSh5nPMrSeQbx`;
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true&token=${token}`;
+                }
+                // SCENARIO 2: If a model is specified
+                else if (model) {
+                    // Check if the model requires the token
+                    if (model === 'seedream' || model === 'kontext') {
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true&token=${token}`;
+                    } else {
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
+                    }
+                }
+                // SCENARIO 3: Default case (only text)
+                else {
+                    // First, try with seedream and the token
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=seedream&enhance=true&seed=${finalSeed}&token=${token}`;
                 }
                 
-                // Add size if specified
+                // Add size parameter if provided
                 if (size) {
                     imageUrl += `&width=${size}`;
                 }
                 
-                // Try to load image
+                // Step 3: Try to load the image
                 img.src = imageUrl;
                 
+                // Step 4: Fallback logic for the default (text-only) scenario
                 img.onerror = async function() {
-                    // Fallback: try with flex model
-                    let fallbackUrl;
-                    
-                    if (userUrl) {
-                        fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true`;
-                    } else if (model) {
-                        fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
-                    } else {
-                        fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flex&seed=${finalSeed}&enhance=true`;
+                    // Only attempt fallback if we are in the default scenario (no url, no model)
+                    if (!userUrl && !model) {
+                        let fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flex&seed=${finalSeed}&enhance=true`;
+                        if (size) {
+                            fallbackUrl += `&width=${size}`;
+                        }
+                        img.src = fallbackUrl;
                     }
-                    
-                    if (size) {
-                        fallbackUrl += `&width=${size}`;
-                    }
-                    
-                    img.src = fallbackUrl;
                 };
                 
             } catch (error) {
-                // If everything fails, use direct prompt
+                // Ultimate fallback: use the original prompt directly with a basic setup
                 let finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}`;
                 if (size) finalUrl += `&width=${size}`;
                 img.src = finalUrl;
