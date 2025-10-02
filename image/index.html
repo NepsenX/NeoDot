@@ -1,57 +1,98 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title></title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            background: #000;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-
-    </style>
+<style>
+    body {
+        background-color: #000;
+        margin: 0;
+        padding: 20px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        font-family: Arial, sans-serif;
+    }
+</style>
 </head>
 <body>
-    <div class="image-container">
-        <img class="generated-image" id="generatedImage" alt="Generated Image">
-    </div>
+    <img id="generatedImage" alt="Generated Image">
 
     <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const generatedImage = document.getElementById('generatedImage');
+        document.addEventListener('DOMContentLoaded', async function() {
+            const img = document.getElementById('generatedImage');
             
             // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const text = urlParams.get('text');
-            const model = urlParams.get('model') || 'auto';
+            const model = urlParams.get('model');
+            const size = urlParams.get('size');
+            const userUrl = urlParams.get('url');
+            const seed = urlParams.get('seed');
             
-            if (text && text.trim() !== '') {
-                // Create the Pollinations.ai image URL
-                const encodedPrompt = encodeURIComponent(text);
-                let imageSrc;
+            if (!text) {
+                document.title = "No prompt provided";
+                return;
+            }
+            
+            document.title = text;
+            
+            // Generate random seed if not provided
+            const finalSeed = seed || Math.floor(Math.random() * 999999) + 1;
+            
+            try {
+                // Step 1: Get enhanced prompt from OpenAI
+                const openaiPromptUrl = `https://text.pollinations.ai/write_only_prompt_for_the_user_image:${encodeURIComponent(text)}?model=openai-fast`;
+                const promptResponse = await fetch(openaiPromptUrl);
+                const enhancedPrompt = await promptResponse.text();
                 
-                if (model && model !== 'auto') {
-                    imageSrc = `https://image.pollinations.ai/prompt/${encodedPrompt}?model=${model}`;
+                // Step 2: Build image URL based on parameters
+                let imageUrl;
+                
+                if (userUrl) {
+                    // If URL provided, use kontext model
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true`;
+                } else if (model) {
+                    // If model specified, use it
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
                 } else {
-                    imageSrc = `https://image.pollinations.ai/prompt/${encodedPrompt}`;
+                    // Default: try seedream first, then flex as fallback
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=seedream&enhance=true&seed=${finalSeed}&token=vHigSh5nPMrSeQbx`;
                 }
                 
-                // Set the image source
-                generatedImage.src = imageSrc;
-                generatedImage.alt = text;
+                // Add size if specified
+                if (size) {
+                    imageUrl += `&width=${size}`;
+                }
                 
-                // Update page title with the prompt
-                document.title = text;
+                // Try to load image
+                img.src = imageUrl;
+                
+                img.onerror = async function() {
+                    // Fallback: try with flex model
+                    let fallbackUrl;
+                    
+                    if (userUrl) {
+                        fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true`;
+                    } else if (model) {
+                        fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
+                    } else {
+                        fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flex&seed=${finalSeed}&enhance=true`;
+                    }
+                    
+                    if (size) {
+                        fallbackUrl += `&width=${size}`;
+                    }
+                    
+                    img.src = fallbackUrl;
+                };
+                
+            } catch (error) {
+                // If everything fails, use direct prompt
+                let finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}`;
+                if (size) finalUrl += `&width=${size}`;
+                img.src = finalUrl;
             }
         });
     </script>
