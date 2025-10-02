@@ -1,16 +1,42 @@
 <html>
 <head>
-    <meta name="viewport" content="width=device-width; height=device-height;">
-    <link rel="stylesheet" href="resource://content-accessible/ImageDocument.css">
-    <link rel="stylesheet" href="resource://content-accessible/TopLevelImageDocument.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title></title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
+        .loading {
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+            text-align: center;
+        }
+        
+        .shrinkToFit {
+            max-width: 100vw;
+            max-height: 100vh;
+            object-fit: contain;
+            display: none; /* Hidden until loaded */
+        }
+    </style>
 </head>
 <body>
-    <img class="shrinkToFit" id="generatedImage" alt="Generated Image" width="965" height="965">
+    <div class="loading" id="loading">Loading image...</div>
+    <img class="shrinkToFit" id="generatedImage" alt="Generated Image">
 
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             const img = document.getElementById('generatedImage');
+            const loading = document.getElementById('loading');
             
             // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
@@ -21,7 +47,7 @@
             const seed = urlParams.get('seed');
             
             if (!text) {
-                console.error('No text prompt provided');
+                loading.textContent = 'Error: No text prompt provided';
                 return;
             }
             
@@ -41,26 +67,22 @@
                 }
                 
                 const enhancedPrompt = await promptResponse.text();
-                const finalPrompt = enhancedPrompt || text; // Fallback to original text if enhanced is empty
+                const finalPrompt = enhancedPrompt || text;
                 
                 // Step 2: Build image URL based on the three main scenarios
                 let imageUrl;
                 const token = "vHigSh5nPMrSeQbx";
                 
-                // SCENARIO 1: If URL provided → use kontext model with token
                 if (userUrl) {
                     imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true&token=${token}`;
                 }
-                // SCENARIO 2: If model specified → use specified model
                 else if (model) {
-                    // For seedream/kontext models, use token
                     if (model === 'seedream' || model === 'kontext') {
                         imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=${model}&seed=${finalSeed}&enhance=true&token=${token}`;
                     } else {
                         imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
                     }
                 }
-                // SCENARIO 3: Text only (default) → try seedream first with token
                 else {
                     imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=seedream&seed=${finalSeed}&enhance=true&token=${token}`;
                 }
@@ -70,28 +92,43 @@
                     imageUrl += `&width=${size}`;
                 }
                 
-                // Step 3: Set image source
-                img.src = imageUrl;
+                // Set image source and handle loading
+                img.onload = function() {
+                    // Hide loading, show image
+                    loading.style.display = 'none';
+                    img.style.display = 'block';
+                    
+                    // Set actual image dimensions
+                    img.width = this.naturalWidth;
+                    img.height = this.naturalHeight;
+                };
                 
-                // Step 4: Fallback logic for default scenario
                 img.onerror = async function() {
-                    // Only fallback for default scenario (no url, no model)
+                    // Fallback for default scenario
                     if (!userUrl && !model) {
                         try {
                             const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=flex&seed=${finalSeed}&enhance=true${size ? `&width=${size}` : ''}`;
                             img.src = fallbackUrl;
                         } catch (fallbackError) {
-                            // Ultimate fallback: use original prompt without enhancement
-                            const ultimateUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${size ? `&width=${size}` : ''}`;
-                            img.src = ultimateUrl;
+                            loading.textContent = 'Error loading image';
                         }
+                    } else {
+                        loading.textContent = 'Error loading image';
                     }
                 };
                 
+                // Start loading the image
+                img.src = imageUrl;
+                
             } catch (error) {
-                console.error('Error in image generation:', error);
-                // Ultimate fallback: use original prompt directly
+                // Ultimate fallback
                 const finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${size ? `&width=${size}` : ''}`;
+                img.onload = function() {
+                    loading.style.display = 'none';
+                    img.style.display = 'block';
+                    img.width = this.naturalWidth;
+                    img.height = this.naturalHeight;
+                };
                 img.src = finalUrl;
             }
         });
