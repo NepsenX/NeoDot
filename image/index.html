@@ -1,6 +1,9 @@
 <html>
 <head>
   <meta name="viewport" content="width=device-width; height=device-height;">
+  <link rel="stylesheet" href="resource://content-accessible/ImageDocument.css">
+  <link rel="stylesheet" href="resource://content-accessible/TopLevelImageDocument.css">
+  <title></title>
     <title></title>
     <style>  
         .loading {
@@ -19,11 +22,13 @@
     </style>
 </head>
 <body>
-    <img class="shrinkToFit" id="generatedImage">
+    <div class="loading" id="loading">Loading image...</div>
+    <img class="shrinkToFit" id="generatedImage" alt="Generated Image">
 
     <script>
         document.addEventListener('DOMContentLoaded', async function() {
             const img = document.getElementById('generatedImage');
+            const loading = document.getElementById('loading');
             
             // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
