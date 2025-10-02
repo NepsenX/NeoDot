@@ -2,19 +2,10 @@
 <html>
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width; height=device-height;">
+    <link rel="stylesheet" href="resource://content-accessible/ImageDocument.css">
+    <link rel="stylesheet" href="resource://content-accessible/TopLevelImageDocument.css">
     <title></title>
-<style>
-    body {
-        background-color: #000;
-        margin: 0;
-        padding: 20px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        min-height: 100vh;
-        font-family: Arial, sans-serif;
-    }
-</style>
 </head>
 <body>
     <img id="generatedImage" alt="Generated Image">
@@ -23,51 +14,57 @@
         document.addEventListener('DOMContentLoaded', async function() {
             const img = document.getElementById('generatedImage');
             
-            // Get all URL parameters
+            // Get URL parameters
             const urlParams = new URLSearchParams(window.location.search);
             const text = urlParams.get('text');
             const model = urlParams.get('model');
             const size = urlParams.get('size');
             const userUrl = urlParams.get('url');
-            const seedParam = urlParams.get('seed');
+            const seed = urlParams.get('seed');
             
-            // Set the final seed
-            const finalSeed = seedParam ? seedParam : Math.floor(Math.random() * 999999) + 1;
-            
-            // Validate that a text prompt exists
             if (!text) {
-                document.title = "Error: No prompt provided";
+                console.error('No text prompt provided');
                 return;
             }
+            
+            // Set page title to prompt
             document.title = text;
             
+            // Generate random seed if not provided (1 to 999999)
+            const finalSeed = seed || Math.floor(Math.random() * 999999) + 1;
+            
             try {
-                // Step 1: Get enhanced prompt from OpenAI
+                // Step 1: Always get enhanced prompt from OpenAI for all categories
                 const openaiPromptUrl = `https://text.pollinations.ai/write_only_prompt_for_the_user_image:${encodeURIComponent(text)}?model=openai-fast`;
                 const promptResponse = await fetch(openaiPromptUrl);
-                const enhancedPrompt = await promptResponse.text();
                 
-                // Step 2: Determine the correct Pollinations.ai URL based on the parameters
-                let imageUrl;
-                const token = "vHigSh5nPMrSeQbx"; // Your token for specific models
-
-                // SCENARIO 1: If a URL is provided, use the 'kontext' model
-                if (userUrl) {
-                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true&token=${token}`;
+                if (!promptResponse.ok) {
+                    throw new Error('OpenAI prompt enhancement failed');
                 }
-                // SCENARIO 2: If a model is specified
+                
+                const enhancedPrompt = await promptResponse.text();
+                const finalPrompt = enhancedPrompt || text; // Fallback to original text if enhanced is empty
+                
+                // Step 2: Build image URL based on the three main scenarios
+                let imageUrl;
+                const token = "vHigSh5nPMrSeQbx";
+                
+                // SCENARIO 1: If URL provided → use kontext model with token
+                if (userUrl) {
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=kontext&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true&token=${token}`;
+                }
+                // SCENARIO 2: If model specified → use specified model
                 else if (model) {
-                    // Check if the model requires the token
+                    // For seedream/kontext models, use token
                     if (model === 'seedream' || model === 'kontext') {
-                        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true&token=${token}`;
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=${model}&seed=${finalSeed}&enhance=true&token=${token}`;
                     } else {
-                        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=${model}&seed=${finalSeed}&enhance=true`;
                     }
                 }
-                // SCENARIO 3: Default case (only text)
+                // SCENARIO 3: Text only (default) → try seedream first with token
                 else {
-                    // First, try with seedream and the token
-                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=seedream&enhance=true&seed=${finalSeed}&token=${token}`;
+                    imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=seedream&seed=${finalSeed}&enhance=true&token=${token}`;
                 }
                 
                 // Add size parameter if provided
@@ -75,25 +72,28 @@
                     imageUrl += `&width=${size}`;
                 }
                 
-                // Step 3: Try to load the image
+                // Step 3: Set image source
                 img.src = imageUrl;
                 
-                // Step 4: Fallback logic for the default (text-only) scenario
+                // Step 4: Fallback logic for default scenario
                 img.onerror = async function() {
-                    // Only attempt fallback if we are in the default scenario (no url, no model)
+                    // Only fallback for default scenario (no url, no model)
                     if (!userUrl && !model) {
-                        let fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?model=flex&seed=${finalSeed}&enhance=true`;
-                        if (size) {
-                            fallbackUrl += `&width=${size}`;
+                        try {
+                            const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=flex&seed=${finalSeed}&enhance=true${size ? `&width=${size}` : ''}`;
+                            img.src = fallbackUrl;
+                        } catch (fallbackError) {
+                            // Ultimate fallback: use original prompt without enhancement
+                            const ultimateUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${size ? `&width=${size}` : ''}`;
+                            img.src = ultimateUrl;
                         }
-                        img.src = fallbackUrl;
                     }
                 };
                 
             } catch (error) {
-                // Ultimate fallback: use the original prompt directly with a basic setup
-                let finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}`;
-                if (size) finalUrl += `&width=${size}`;
+                console.error('Error in image generation:', error);
+                // Ultimate fallback: use original prompt directly
+                const finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${size ? `&width=${size}` : ''}`;
                 img.src = finalUrl;
             }
         });
