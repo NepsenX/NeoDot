@@ -1,11 +1,19 @@
 <html>
 <head>
-  <meta name="viewport" content="width=device-width; height=device-height;">
-  <link rel="stylesheet" href="resource://content-accessible/ImageDocument.css">
-  <link rel="stylesheet" href="resource://content-accessible/TopLevelImageDocument.css">
-  <title></title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title></title>
     <style>  
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        
         .loading {
             color: white;
             font-family: Arial, sans-serif;
@@ -17,7 +25,7 @@
             max-width: 100vw;
             max-height: 100vh;
             object-fit: contain;
-            display: none; /* Hidden until loaded */
+            display: none;
         }
     </style>
 </head>
@@ -90,9 +98,11 @@
                     loading.style.display = 'none';
                     img.style.display = 'block';
                     
-                    // Set actual image dimensions
-                    img.width = this.naturalWidth;
-                    img.height = this.naturalHeight;
+                    // Set image to fill available space while maintaining aspect ratio
+                    img.style.width = 'auto';
+                    img.style.height = 'auto';
+                    img.style.maxWidth = '100vw';
+                    img.style.maxHeight = '100vh';
                 };
                 
                 img.onerror = async function() {
@@ -100,6 +110,8 @@
                     if (!userUrl && !model) {
                         try {
                             const fallbackUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?model=flex&seed=${finalSeed}&enhance=true${size ? `&width=${size}` : ''}`;
+                            // Remove current onerror to prevent infinite loop
+                            img.onerror = null;
                             img.src = fallbackUrl;
                         } catch (fallbackError) {
                             loading.textContent = 'Error loading image';
@@ -113,13 +125,16 @@
                 img.src = imageUrl;
                 
             } catch (error) {
+                console.error('Error in image generation:', error);
                 // Ultimate fallback
                 const finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${size ? `&width=${size}` : ''}`;
                 img.onload = function() {
                     loading.style.display = 'none';
                     img.style.display = 'block';
-                    img.width = this.naturalWidth;
-                    img.height = this.naturalHeight;
+                    img.style.width = 'auto';
+                    img.style.height = 'auto';
+                    img.style.maxWidth = '100vw';
+                    img.style.maxHeight = '100vh';
                 };
                 img.src = finalUrl;
             }
