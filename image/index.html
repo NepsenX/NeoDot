@@ -91,8 +91,8 @@
             backgroundPadding: 4
         };
 
-// Size presets dictionary (200+ presets)
-        const sizePresets = {
+        // Size presets dictionary (200+ presets)
+        const sizePresets = { // <-- Corrected capitalization
             // Social Media
             youtube: { width: 1280, height: 720 },
             youtube_thumbnail: { width: 1280, height: 720 },
@@ -348,6 +348,44 @@
         // MAIN APPLICATION CODE
         // =============================================
 
+        // Helper function to process size parameter
+        function getSizeDimensions(sizeParam) {
+            let width = sizePresets.default.width;
+            let height = sizePresets.default.height;
+
+            if (!sizeParam) {
+                return { width, height };
+            }
+
+            const lowerCaseSize = sizeParam.toLowerCase();
+
+            // 1. Check if it's a known preset name
+            if (sizePresets[lowerCaseSize]) {
+                width = sizePresets[lowerCaseSize].width;
+                height = sizePresets[lowerCaseSize].height;
+            } 
+            // 2. Check if it's in WxH format
+            else if (lowerCaseSize.includes('x')) {
+                const parts = lowerCaseSize.split('x').map(p => parseInt(p, 10));
+                if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                    width = parts[0];
+                    height = parts[1];
+                }
+            }
+            // 3. Check if it's a single number (for square output)
+            else if (!isNaN(sizeParam)) {
+                width = parseInt(sizeParam, 10);
+                height = parseInt(sizeParam, 10);
+            }
+            
+            // Limit sizes to max 2000x2000 for stability unless it's a preset
+            if (width > 2000 && !sizePresets[lowerCaseSize]) width = 2000;
+            if (height > 2000 && !sizePresets[lowerCaseSize]) height = 2000;
+
+            return { width, height };
+        }
+
+
         document.addEventListener('DOMContentLoaded', async function() {
             const img = document.getElementById('generatedImage');
             const canvas = document.getElementById('processedCanvas');
@@ -372,6 +410,10 @@
             
             // Generate random seed if not provided (1 to 999999)
             const finalSeed = seed || Math.floor(Math.random() * 999999) + 1;
+
+            // Determine size dimensions for URL
+            const { width: finalWidth, height: finalHeight } = getSizeDimensions(size);
+
             
             async function addLogoToCanvas() {
                 return new Promise((resolve) => {
@@ -413,93 +455,92 @@
                 });
             }
 
+            let finalPrompt = text;
+            
             try {
                 // Step 1: Always get enhanced prompt from OpenAI
                 loading.textContent = 'Enhancing prompt with OpenAI...';
                 const openaiPromptUrl = `${API_CONFIG.promptEnhancement}:${encodeURIComponent(text)}?model=${API_CONFIG.enhancementModel}`;
                 
-                let enhancedPrompt = text;
                 try {
                     const promptResponse = await fetch(openaiPromptUrl);
                     if (promptResponse.ok) {
-                        enhancedPrompt = await promptResponse.text();
+                        finalPrompt = await promptResponse.text();
+                        console.log("Prompt enhanced successfully.");
+                    } else {
+                        console.warn("OpenAI prompt enhancement failed, status:", promptResponse.status, "Using original prompt.");
                     }
                 } catch (promptError) {
-                    console.log("OpenAI prompt enhancement failed, using original prompt:", promptError);
+                    console.error("Network or fetch error during prompt enhancement:", promptError);
                     // Continue with original prompt if enhancement fails
                 }
-                
-                const finalPrompt = enhancedPrompt || text;
                 
                 // Step 2: Build image URL based on the three main scenarios
                 let imageUrl;
                 loading.textContent = 'Generating image...';
                 
+                // Helper function to build the base URL part
+                const buildBaseImageUrl = (selectedModel) => {
+                    const config = MODEL_CONFIG[selectedModel] || MODEL_CONFIG[API_CONFIG.defaultModel];
+                    let url = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${selectedModel}&seed=${finalSeed}&enhance=true`;
+                    if (config.requiresToken) {
+                        url += `&token=${config.token}`;
+                    }
+                    url += `${WATERMARK_CONFIG.removeFilter}&width=${finalWidth}&height=${finalHeight}`;
+                    return url;
+                };
+
+
                 if (userUrl) {
+                    // Scenario 1: Image-to-Image (requires tokenized model)
                     const modelConfig = MODEL_CONFIG[API_CONFIG.defaultModel];
-                    imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${API_CONFIG.defaultModel}&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true&token=${modelConfig.token}${WATERMARK_CONFIG.removeFilter}`;
+                    imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${API_CONFIG.defaultModel}&url=${encodeURIComponent(userUrl)}&seed=${finalSeed}&enhance=true&token=${modelConfig.token}${WATERMARK_CONFIG.removeFilter}&width=${finalWidth}&height=${finalHeight}`;
+                    console.log("Using Image-to-Image generation.");
                 }
                 else if (model) {
-                    const modelConfig = MODEL_CONFIG[model.toLowerCase()] || MODEL_CONFIG[API_CONFIG.defaultModel];
-                    if (modelConfig.requiresToken) {
-                        imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${model}&seed=${finalSeed}&enhance=true&token=${modelConfig.token}${WATERMARK_CONFIG.removeFilter}`;
-                    } else {
-                        imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${model}&seed=${finalSeed}&enhance=true${WATERMARK_CONFIG.removeFilter}`;
-                    }
+                    // Scenario 2: Specific Model requested
+                    const selectedModel = model.toLowerCase();
+                    imageUrl = buildBaseImageUrl(selectedModel);
+                    console.log(`Using specific model: ${selectedModel}`);
                 }
                 else {
+                    // Scenario 3: Default/Fallback sequence
+                    
                     // Try default model first
-                    const defaultConfig = MODEL_CONFIG[API_CONFIG.defaultModel];
-                    imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${API_CONFIG.defaultModel}&seed=${finalSeed}&enhance=true&token=${defaultConfig.token}${WATERMARK_CONFIG.removeFilter}`;
+                    const defaultModel = API_CONFIG.defaultModel;
+                    imageUrl = buildBaseImageUrl(defaultModel);
                 
                     try {
+                        console.log(`Attempting default model: ${defaultModel}`);
                         const res = await fetch(imageUrl, { method: "HEAD" });
                         if (!res.ok) {
+                            console.warn(`Default model ${defaultModel} failed. Status: ${res.status}. Trying fallback models.`);
+                            
                             // If default fails, try fallback models
                             for (const fallbackModel of API_CONFIG.fallbackModels) {
-                                const fallbackConfig = MODEL_CONFIG[fallbackModel];
-                                imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=${fallbackModel}&seed=${finalSeed}&enhance=true${fallbackConfig.requiresToken ? `&token=${fallbackConfig.token}` : ''}${WATERMARK_CONFIG.removeFilter}`;
-                                
+                                imageUrl = buildBaseImageUrl(fallbackModel);
+                                console.log(`Attempting fallback model: ${fallbackModel}`);
                                 const res2 = await fetch(imageUrl, { method: "HEAD" });
-                                if (res2.ok) break;
+                                if (res2.ok) {
+                                    console.log(`Fallback successful with ${fallbackModel}.`);
+                                    break;
+                                }
                             }
                         }
                     } catch (err) {
+                        console.error("Network error during initial HEAD check, falling back to flex:", err);
                         // In case of network error, fallback directly to flex
-                        const flexConfig = MODEL_CONFIG.flex;
-                        imageUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(finalPrompt)}?model=flex&seed=${finalSeed}&enhance=true${WATERMARK_CONFIG.removeFilter}`;
+                        imageUrl = buildBaseImageUrl('flex');
                     }
                 }
 
-                // Add size parameter if provided
-                if (size) {
-                    const preset = SIZE_PRESETS[size.toLowerCase()] || SIZE_PRESETS.default;
-                    
-                    // If size is a preset name, use its dimensions
-                    if (SIZE_PRESETS[size.toLowerCase()]) {
-                        imageUrl += `&width=${preset.width}&height=${preset.height}`;
-                    } 
-                    // If size is a custom number, use it for both width and height
-                    else if (!isNaN(size)) {
-                        imageUrl += `&width=${size}&height=${size}`;
-                    }
-                    // If size is in format "WxH" (e.g., "800x600")
-                    else if (size.includes('x')) {
-                        const [width, height] = size.split('x');
-                        imageUrl += `&width=${width}&height=${height}`;
-                    }
-                    // Default fallback
-                    else {
-                        imageUrl += `&width=${preset.width}&height=${preset.height}`;
-                    }
-                }
                 
-                // Load and process image for watermark removal
+                // Step 3: Load and process image for watermark removal
                 loading.textContent = 'Processing image and removing watermark...';
                 
                 const response = await fetch(imageUrl);
                 if (!response.ok) {
-                    throw new Error('Failed to load image from Pollinations');
+                    throw new Error(`Failed to load image from Pollinations (HTTP Status: ${response.status})`);
                 }
                 
                 const blob = await response.blob();
@@ -525,9 +566,8 @@
                         canvas.width, canvas.height
                     );
                     
-                    // Enhanced watermark removal
+                    // Enhanced watermark removal check
                     try {
-                        // Check bottom-right area for watermark
                         const watermarkCheckArea = ctx.getImageData(
                             canvas.width - WATERMARK_CONFIG.watermarkDetectionArea,
                             canvas.height - WATERMARK_CONFIG.watermarkDetectionArea,
@@ -540,15 +580,13 @@
                         const threshold = WATERMARK_CONFIG.watermarkColorThreshold;
                         
                         for (let i = 0; i < data.length; i += 4) {
-                            // Detect semi-transparent white (common watermark color)
                             if (data[i] > threshold.r && data[i+1] > threshold.g && data[i+2] > threshold.b && data[i+3] > threshold.a) {
                                 watermarkPixels++;
                             }
                         }
                         
-                        // If watermark detected above threshold
                         if (watermarkPixels > WATERMARK_CONFIG.watermarkPixelThreshold) {
-                            // Cut additional 1px if needed
+                            // Cut additional 1px if highly suspected
                             canvas.height -= 1;
                             ctx.clearRect(0, 0, canvas.width, canvas.height);
                             ctx.drawImage(
@@ -560,7 +598,7 @@
                             );
                         }
                     } catch (e) {
-                        console.log("Watermark detection error:", e);
+                        console.warn("Watermark detection error, proceeding with current crop:", e);
                     }
                     
                     // Add NeoDot logo
@@ -582,27 +620,30 @@
                         
                         // Clean up
                         URL.revokeObjectURL(originalImageUrl);
+                        console.log("Image successfully processed and displayed.");
                     };
                 };
                 
                 tempImg.onerror = function() {
-                    loading.textContent = 'Error processing image';
+                    loading.textContent = 'Error processing image: Image data invalid or corrupt.';
                     URL.revokeObjectURL(originalImageUrl);
                 };
                 
             } catch (error) {
-                console.error('Error:', error);
-                loading.textContent = 'Error: ' + error.message;
+                console.error('Main generation error:', error);
+                loading.textContent = 'Error: ' + error.message + '. Attempting ultimate fallback...';
                 
-                // Ultimate fallback - try without processing
+                // Ultimate fallback - try without enhancement or processing (using flex model)
                 try {
-                    const flexConfig = MODEL_CONFIG.flex;
-                    const finalUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${WATERMARK_CONFIG.removeFilter}${size ? `&width=${size}` : ''}`;
+                    const fallbackDimensions = getSizeDimensions(size); // Re-calculate dimensions for ultimate fallback
+                    const finalUrl = `${API_CONFIG.imageGeneration}/${encodeURIComponent(text)}?model=flex&seed=${finalSeed}${WATERMARK_CONFIG.removeFilter}&width=${fallbackDimensions.width}&height=${fallbackDimensions.height}`;
+                    
                     img.onload = function() {
                         loading.style.display = 'none';
                         img.style.display = 'block';
                         img.width = this.naturalWidth;
                         img.height = this.naturalHeight;
+                        console.log("Ultimate fallback succeeded.");
                     };
                     img.onerror = function() {
                         loading.textContent = 'Failed to load image after all attempts';
@@ -610,6 +651,7 @@
                     img.src = finalUrl;
                 } catch (finalError) {
                     loading.textContent = 'All image generation methods failed';
+                    console.error('Ultimate fallback failed:', finalError);
                 }
             }
         });
